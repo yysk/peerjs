@@ -733,11 +733,47 @@ Negotiator.handleCandidate = function(connection, ice) {
 
   var candidate = ice.candidate;
   var sdpMLineIndex = ice.sdpMLineIndex;
-  //var sdpMid = ice.sdpMid;
-  connection.pc.addIceCandidate(new RTCIceCandidate({
-    sdpMLineIndex: sdpMLineIndex,
-    candidate: candidate
-  }));
+  var sdpMid = ice.sdpMid;
+
+  if(candidate === 'candidate:1 1 udp 1 0.0.0.0 9 typ endOfCandidates' && window.webrtcDetectedBrowser === 'edge') {
+    util.log('Generated ICE candidate for:', connection.peer);
+    connection.pc.addIceCandidate(new RTCIceCandidate({
+      sdpMLineIndex: sdpMLineIndex,
+      candidate: candidate
+    }));
+  } else if(candidate === 'candidate:1 1 udp 1 0.0.0.0 9 typ endOfCandidates' && window.webrtcDetectedBrowser !== 'edge') {
+    util.log('Generated ICE candidate for:', connection.peer);
+    connection.provider.socket.send({
+      type: 'CANDIDATE',
+      payload: {
+        candidate: {
+          sdpMid: sdpMid,
+          sdpMLineIndex: 0,
+          candidate: 'candidate:1 1 udp 1 0.0.0.0 9 typ endOfCandidates'
+        },
+        type: 'endOfCandidates',
+        connectionId: connection.id
+      },
+      dst: connection.peer
+    })
+  } else if(candidate === undefined && window.webrtcDetectedBrowser !== 'edge') {
+    util.log('Generated ICE candidate for:', connection.peer);
+    connection.provider.socket.send({
+      type: 'CANDIDATE',
+      payload: {
+        candidate: {
+        },
+        type: '',
+        connectionId: connection.id
+      },
+      dst: connection.peer
+    })
+  } else if(candidate !== undefined && candidate !== 'candidate:1 1 udp 1 0.0.0.0 9 typ endOfCandidates') {
+    connection.pc.addIceCandidate(new RTCIceCandidate({
+      sdpMLineIndex: sdpMLineIndex,
+      candidate: candidate
+    }));
+  }
   util.log('Added ICE candidate for:', connection.peer);
 }
 
@@ -955,18 +991,26 @@ Peer.prototype._initialize = function(serverid) {
   // SkyWay Original Code
   if(this.options.turn === true){
     if(this.credential){
-      this.options.config.iceServers.push({
-        urls: 'turn:' + util.TURN_HOST + ':' + util.TURN_PORT + '?transport=tcp',
-        url: 'turn:' + util.TURN_HOST + ':' + util.TURN_PORT + '?transport=tcp',
-        username: this.options.key + '$' + this.id,
-        credential: this.credential
-      });
-      this.options.config.iceServers.push({
-        urls: 'turn:' + util.TURN_HOST + ':' + util.TURN_PORT + '?transport=udp',
-        url: 'turn:' + util.TURN_HOST + ':' + util.TURN_PORT + '?transport=udp',
-        username: this.options.key + '$' + this.id,
-        credential: this.credential
-      });
+      if(window.webrtcDetectedBrowser === 'edge'){
+        this.options.config.iceServers.push({
+          urls: 'turn:' + util.TURN_HOST + ':' + util.TURN_PORT + '?transport=udp',
+          username: this.options.key + '$' + this.id,
+          credential: this.credential
+        });
+      }else{
+        this.options.config.iceServers.push({
+          urls: 'turn:' + util.TURN_HOST + ':' + util.TURN_PORT + '?transport=tcp',
+          url: 'turn:' + util.TURN_HOST + ':' + util.TURN_PORT + '?transport=tcp',
+          username: this.options.key + '$' + this.id,
+          credential: this.credential
+        });
+        this.options.config.iceServers.push({
+          urls: 'turn:' + util.TURN_HOST + ':' + util.TURN_PORT + '?transport=udp',
+          url: 'turn:' + util.TURN_HOST + ':' + util.TURN_PORT + '?transport=udp',
+          username: this.options.key + '$' + this.id,
+          credential: this.credential
+        });
+      }
       this.options.config.iceTransports = 'all';
     }
   }
@@ -1561,7 +1605,11 @@ Socket.prototype.close = function() {
 module.exports = Socket;
 
 },{"./util":8,"eventemitter3":9}],8:[function(require,module,exports){
-var defaultConfig = {'iceServers': [{ 'urls': 'stun:stun.skyway.io:3478' , 'url': 'stun:stun.skyway.io:3478'}]};
+if(window.webrtcDetectedBrowser === 'edge') {
+  var defaultConfig = {'iceServers': []};
+} else {
+  var defaultConfig = {'iceServers': [{'urls': 'stun:stun.skyway.io:3478', 'url': 'stun:stun.skyway.io:3478'}]};
+}
 var dataCount = 1;
 
 var BinaryPack = require('js-binarypack');
